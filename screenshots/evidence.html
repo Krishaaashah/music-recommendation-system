@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Music Recommendation System Evidence</title>
+  <style>
+    body { margin: 0; padding: 28px; font-family: Arial, sans-serif; color: #10233f; background: #f4f7fb; }
+    h1 { margin: 0 0 8px; font-size: 30px; }
+    .subtitle { color: #4f647e; margin-bottom: 22px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    section { background: white; border: 1px solid #bfd0e5; border-radius: 8px; padding: 18px; box-shadow: 0 2px 8px #183b5d18; }
+    h2 { margin: 0 0 12px; font-size: 20px; color: #0b5cad; }
+    .wide { grid-column: 1 / -1; }
+    pre { margin: 0; padding: 14px; background: #112238; color: #e4f0ff; border-radius: 6px; white-space: pre-wrap; font: 13px/1.45 Consolas, monospace; }
+    .status { display: inline-block; padding: 4px 9px; border-radius: 12px; background: #d9f7e7; color: #08733c; font-weight: bold; margin-bottom: 10px; }
+    .error { background: #ffe2e2; color: #a11; }
+  </style>
+</head>
+<body>
+  <h1>Scalable Music Recommendation System</h1>
+  <div class="subtitle">Evidence capture from the running FastAPI service</div>
+  <div class="grid">
+    <section id="health-section"><h2>System Health</h2><div id="health-status" class="status">Loading...</div><pre id="health">Loading...</pre></section>
+    <section id="rec-section"><h2>Recommendation API</h2><div id="rec-status" class="status">Loading...</div><pre id="recommendation">Loading...</pre></section>
+    <section id="stream-section" class="wide"><h2>Real-Time Streaming Metrics</h2><div id="stream-status" class="status">Loading...</div><pre id="streaming">Loading...</pre></section>
+  </div>
+  <script>
+    const api = 'http://localhost:8001';
+    async function load(path, target, badge) {
+      try {
+        const response = await fetch(api + path);
+        const value = await response.json();
+        document.getElementById(target).textContent = JSON.stringify(value, null, 2);
+        document.getElementById(badge).textContent = 'HTTP ' + response.status + ' OK';
+      } catch (error) {
+        document.getElementById(target).textContent = String(error);
+        document.getElementById(badge).textContent = 'Unavailable';
+        document.getElementById(badge).classList.add('error');
+      }
+    }
+    load('/health', 'health', 'health-status');
+    load('/recommend/3143?n=10&strategy=hybrid', 'recommendation', 'rec-status');
+    load('/live/stats', 'streaming', 'stream-status');
+    const view = location.hash.slice(1);
+    if (view === 'health') document.getElementById('rec-section').style.display = 'none';
+    if (view === 'health') document.getElementById('stream-section').style.display = 'none';
+    if (view === 'recommendation') document.getElementById('health-section').style.display = 'none';
+    if (view === 'recommendation') document.getElementById('stream-section').style.display = 'none';
+    if (view === 'streaming') document.getElementById('health-section').style.display = 'none';
+    if (view === 'streaming') document.getElementById('rec-section').style.display = 'none';
+  </script>
+</body>
+</html>

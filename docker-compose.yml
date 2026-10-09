@@ -1,0 +1,264 @@
+services:
+  # NoSQL Document Database
+  mongodb:
+    image: mongo:7
+    container_name: mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - music-net
+
+  # FastAPI REST Recommendation Service
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: music-recommendation-api
+    restart: unless-stopped
+    command: python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017
+      - MONGO_DB_NAME=music_recommendation
+      - MAHOUT_RECOMMENDATIONS_PATH=/app/output/mahout-lastfm
+      - DATASET_INTERACTIONS_PATH=/app/dataset/lastfm/train_triplets.txt
+      - SONG_MAPPING_PATH=/app/dataset/lastfm/song_mapping.csv
+      - USER_MAPPING_PATH=/app/dataset/lastfm/user_mapping.csv
+      - SONG_METADATA_PATH=/app/dataset/lastfm/song_metadata.csv
+      - EVALUATION_MAX_ROWS=1000000
+      - STREAM_INPUT_DIR=/app/streaming/input
+      - CORS_ORIGINS=http://localhost:8501,http://127.0.0.1:8501,http://localhost:3000,http://127.0.0.1:3000
+    volumes:
+      - ./dataset:/app/dataset:ro
+      - ./output:/app/output:ro
+      - ./streaming:/app/streaming
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - music-net
+
+  # Streamlit Interactive Web Dashboard
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: music-recommendation-ui
+    restart: unless-stopped
+    command: streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE_URL=http://fastapi:8000
+    depends_on:
+      fastapi:
+        condition: service_healthy
+    networks:
+      - music-net
+
+  # Hadoop HDFS primary node. The auxiliary YARN service below shares this
+  # node role because Hadoop's reference images separate daemons by container.
+  h-primary:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: h-primary
+    environment:
+      - CLUSTER_NAME=music-hadoop
+      - CORE_CONF_fs_defaultFS=hdfs://h-primary:9000
+      - HDFS_CONF_dfs_replication=3
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    volumes:
+      - namenode_data:/hadoop/dfs/name
+      - ./dataset:/opt/music/dataset:ro
+    networks:
+      - music-net
+
+  h-primary-yarn:
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+    container_name: h-primary-yarn
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://h-primary:9000
+      - YARN_CONF_yarn_resourcemanager_hostname=h-primary-yarn
+      - YARN_CONF_yarn_nodemanager_aux___services=mapreduce_shuffle
+    depends_on:
+      - h-primary
+    ports:
+      - "8088:8088"
+    networks:
+      - music-net
+
+  h-worker1:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: h-worker1
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://h-primary:9000
+      - HDFS_CONF_dfs_replication=3
+    depends_on:
+      - h-primary
+    volumes:
+      - datanode1_data:/hadoop/dfs/data
+    networks:
+      - music-net
+
+  h-worker1-yarn:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: h-worker1-yarn
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://h-primary:9000
+      - YARN_CONF_yarn_resourcemanager_hostname=h-primary-yarn
+      - YARN_CONF_yarn_nodemanager_aux___services=mapreduce_shuffle
+    depends_on:
+      - h-primary-yarn
+    networks:
+      - music-net
+
+  h-worker2:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: h-worker2
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://h-primary:9000
+      - HDFS_CONF_dfs_replication=3
+    depends_on:
+      - h-primary
+    volumes:
+      - datanode2_data:/hadoop/dfs/data
+    networks:
+      - music-net
+
+  h-worker2-yarn:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: h-worker2-yarn
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://h-primary:9000
+      - YARN_CONF_yarn_resourcemanager_hostname=h-primary-yarn
+      - YARN_CONF_yarn_nodemanager_aux___services=mapreduce_shuffle
+    depends_on:
+      - h-primary-yarn
+    networks:
+      - music-net
+
+  h-worker3:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: h-worker3
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://h-primary:9000
+      - HDFS_CONF_dfs_replication=3
+    depends_on:
+      - h-primary
+    volumes:
+      - datanode3_data:/hadoop/dfs/data
+    networks:
+      - music-net
+
+  h-worker3-yarn:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: h-worker3-yarn
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://h-primary:9000
+      - YARN_CONF_yarn_resourcemanager_hostname=h-primary-yarn
+      - YARN_CONF_yarn_nodemanager_aux___services=mapreduce_shuffle
+    depends_on:
+      - h-primary-yarn
+    networks:
+      - music-net
+
+  # Spark 3.5.9 services provide a reproducible local distributed demo.
+  # Hadoop remains the storage layer; YARN is available through h-primary-yarn.
+  spark-master:
+    image: bitnami/spark:3.5.9
+    container_name: h-primary-spark
+    environment:
+      - SPARK_MODE=master
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    ports:
+      - "7077:7077"
+      - "8081:8080"
+    depends_on:
+      - h-primary
+    networks:
+      - music-net
+
+  spark-worker1:
+    image: bitnami/spark:3.5.9
+    container_name: h-worker1-spark
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    depends_on:
+      - spark-master
+    networks:
+      - music-net
+
+  spark-worker2:
+    image: bitnami/spark:3.5.9
+    container_name: h-worker2-spark
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    depends_on:
+      - spark-master
+    networks:
+      - music-net
+
+  spark-worker3:
+    image: bitnami/spark:3.5.9
+    container_name: h-worker3-spark
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=1
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+    depends_on:
+      - spark-master
+    networks:
+      - music-net
+
+volumes:
+  mongo_data:
+    driver: local
+  namenode_data:
+    driver: local
+  datanode1_data:
+    driver: local
+  datanode2_data:
+    driver: local
+  datanode3_data:
+    driver: local
+
+networks:
+  music-net:
+    driver: bridge

@@ -1,0 +1,14 @@
+.git
+.gitignore
+.codex
+.agents
+dataset/*.txt
+dataset/*.zip
+dataset/lastfm-dataset-1K/
+dataset/lastfm/
+spark/
+tests/
+*.pyc
+__pycache__/
+logs/
+streaming/

@@ -1,0 +1,67 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/
+
+# Node and frontend build output
+node_modules/
+dist/
+build/
+.vite/
+.cache/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Raw and generated datasets
+dataset/*.txt
+dataset/*.zip
+dataset/lastfm-dataset-1K/
+dataset/lastfm/
+streaming/
+*.parquet
+*.orc
+*.avro
+
+# Bundled local Spark/Hadoop runtime
+spark/
+spark-*.tgz
+hadoop-*.tar.gz
+
+# Local databases and processing state
+metastore_db/
+derby.log
+.spark-staging/
+spark-warehouse/
+checkpoints/
+
+# Local process output and generated verification logs
+*.log
+*.err
+*.out
+test-run-output.txt
+capture-*.html
+
+# Generated report rendering directories
+report_render/
+report/
+
+# Legacy compatibility shim not used by the current application entry point
+api/
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
