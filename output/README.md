@@ -12,6 +12,8 @@ output/
     part-r-00000
   local-cf-top100/
     part-r-00000
+  local-cf-top70/
+    part-r-00000
 ```
 
 The FastAPI backend reads Mahout recommendations from `output/mahout` by default. To use another file or directory, set:
@@ -28,3 +30,6 @@ with `python scripts/build_local_cf_benchmark.py`.
 
 The optional `local-cf-top100` artifact is generated with `--k 100` for wider
 Recall@100 and Hit Rate@100 analysis.
+
+The `local-cf-top70` artifact is generated with `--k 70` and is useful for the
+intermediate Recall@70 and Hit Rate@70 report point.

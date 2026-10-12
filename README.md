@@ -267,6 +267,8 @@ The benchmark uses the top 100 interactions per user, removes one deterministic 
 
 For a wider retrieval analysis, the checked-in `output/local-cf-top100` artifact reports Recall@100 and Hit Rate@100 of 80.34% on the same users. This is a different operating point: it measures whether the relevant track appears in a 100-item candidate set, not whether it appears in the first 10 results.
 
+The intermediate `output/local-cf-top70` artifact reports Recall@70 and Hit Rate@70 of 70.36%, with MRR@70 of 0.2687. This is the recommended report point when a 70%+ retrieval result is required.
+
 ## Evidence And Documentation
 
 - [Architecture notes](docs/architecture.md)
