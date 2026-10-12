@@ -53,6 +53,7 @@ capture-*.html
 # Generated report rendering directories
 report_render/
 report/
+tmp/
 
 # Legacy compatibility shim not used by the current application entry point
 api/

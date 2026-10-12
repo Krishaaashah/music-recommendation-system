@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import math
 import os
 import re
 import time
@@ -360,8 +361,13 @@ class RecommendationService:
         content_scores = {item.item_id: item.score for item in content_items}
 
         scored_candidates: dict[str, dict[str, Any]] = {}
-        for it in cf_items:
-            norm_cf = (it.score - min_cf) / cf_range
+        for rank, it in enumerate(cf_items):
+            # Mahout can legitimately emit tied scores for sparse users. A
+            # zero-valued min-max range would otherwise erase the rank order
+            # and let weak fallback signals reshuffle the whole list.
+            rank_score = 1.0 - (rank / max(1, len(cf_items) - 1))
+            minmax_score = (it.score - min_cf) / cf_range
+            norm_cf = rank_score if (max_cf - min_cf) <= 1e-6 else (0.8 * minmax_score) + (0.2 * rank_score)
             scored_candidates[it.item_id] = {
                 "item_id": it.item_id,
                 "norm_cf": norm_cf,
@@ -385,15 +391,27 @@ class RecommendationService:
 
         # Enrich with popularity
         self._ensure_dataset_stats_loaded()
+        max_plays = max(
+            (stats.get("total_plays", 0) for stats in (self._item_stats or {}).values()),
+            default=1,
+        )
         for it_id, data in scored_candidates.items():
             if self._item_stats and it_id in self._item_stats:
                 plays = self._item_stats[it_id].get("total_plays", 0)
-                data["popularity"] = min(1.0, float(plays) / 50.0)
+                # Log scaling prevents a small number of very popular tracks
+                # from saturating the popularity feature at 1.0.
+                data["popularity"] = min(
+                    1.0,
+                    math.log1p(float(plays)) / math.log1p(float(max_plays)),
+                )
 
         # Calculate final hybrid score
         hybrid_results: list[ScoredItem] = []
         for it_id, data in scored_candidates.items():
-            content_component = data["content"] if content_scores else data["cooccurrence"]
+            # Keep both enrichment signals when available. Content similarity
+            # is useful for metadata-rich tracks; co-occurrence is useful when
+            # the metadata index is sparse.
+            content_component = max(data["content"], data["cooccurrence"])
             final_score = (alpha * data["norm_cf"]) + (beta * content_component) + (gamma * data["popularity"])
             reason = (
                 f"Hybrid Match: CF Log-Likelihood ({data['raw_cf']:.2f}) "
@@ -539,6 +557,8 @@ class RecommendationService:
         self._item_stats = defaultdict(lambda: {"total_plays": 0, "unique_listeners": 0})
         self._user_history = defaultdict(list)
         popularity_counter: Counter[str] = Counter()
+        sampled_rows_by_user: Counter[str] = Counter()
+        rows_per_user = max(1, int(os.getenv("STATS_ROWS_PER_USER", "100")))
 
         data_paths = [self.dataset_path] if self.dataset_path else DEFAULT_DATASET_PATHS
         dataset_file = next((p for p in data_paths if p and p.is_file()), None)
@@ -546,30 +566,32 @@ class RecommendationService:
         if dataset_file:
             try:
                 logger.info("Parsing dataset stats from %s...", dataset_file)
-                with open(dataset_file, "r", encoding="utf-8") as f:
-                    for i, line in enumerate(f):
-                        parts = line.strip().split("\t")
-                        if len(parts) >= 3:
-                            uhash, scode, plays_str = parts[0].strip(), parts[1].strip(), parts[2].strip()
-                            try:
-                                plays = int(plays_str)
-                            except ValueError:
-                                plays = 1
-                            iid = self.get_item_id(scode) or scode
-                            uid = self._user_map.get(uhash) if self._user_map else uhash
+                for line in self._sample_dataset_lines(dataset_file):
+                    parts = line.strip().split("\t")
+                    if len(parts) >= 3:
+                        uhash, scode, plays_str = parts[0].strip(), parts[1].strip(), parts[2].strip()
+                        if sampled_rows_by_user[uhash] >= rows_per_user:
+                            continue
+                        sampled_rows_by_user[uhash] += 1
+                        try:
+                            plays = int(plays_str)
+                        except ValueError:
+                            plays = 1
+                        iid = self.get_item_id(scode) or scode
+                        uid = self._user_map.get(uhash) if self._user_map else uhash
 
-                            self._item_stats[iid]["total_plays"] += plays
-                            self._item_stats[iid]["unique_listeners"] += 1
-                            popularity_counter[iid] += plays
+                        self._item_stats[iid]["total_plays"] += plays
+                        self._item_stats[iid]["unique_listeners"] += 1
+                        popularity_counter[iid] += plays
 
-                            if len(self._user_history[uid]) < 10:
-                                self._user_history[uid].append({
-                                    "item_id": iid,
-                                    "song_code": scode,
-                                    "play_count": plays,
-                                })
-                        if i >= 100000:  # Sample for fast in-memory indexing
-                            break
+                        history = self._user_history[uid]
+                        history.append({
+                            "item_id": iid,
+                            "song_code": scode,
+                            "play_count": plays,
+                        })
+                        history.sort(key=lambda item: item["play_count"], reverse=True)
+                        del history[10:]
             except Exception as exc:
                 logger.warning("Could not build full dataset stats: %s", exc)
 
@@ -599,15 +621,17 @@ class RecommendationService:
 
         if dataset_file:
             try:
-                with open(dataset_file, "r", encoding="utf-8") as f:
-                    for i, line in enumerate(f):
-                        parts = line.strip().split("\t")
-                        if len(parts) >= 2:
-                            uhash, scode = parts[0].strip(), parts[1].strip()
-                            iid = self.get_item_id(scode) or scode
-                            user_items[uhash].append(iid)
-                        if i >= 50000:
-                            break
+                rows_per_user = max(1, int(os.getenv("COOCCURRENCE_ROWS_PER_USER", "50")))
+                sampled_rows_by_user: Counter[str] = Counter()
+                for line in self._sample_dataset_lines(dataset_file):
+                    parts = line.strip().split("\t")
+                    if len(parts) >= 2:
+                        uhash, scode = parts[0].strip(), parts[1].strip()
+                        if sampled_rows_by_user[uhash] >= rows_per_user:
+                            continue
+                        sampled_rows_by_user[uhash] += 1
+                        iid = self.get_item_id(scode) or scode
+                        user_items[uhash].append(iid)
 
                 for items in user_items.values():
                     unique_items = list(set(items))
@@ -617,6 +641,28 @@ class RecommendationService:
                             self._item_cooccurrence[item_b][item_a] += 1
             except Exception as exc:
                 logger.warning("Error building item co-occurrence: %s", exc)
+
+    @staticmethod
+    def _sample_dataset_lines(dataset_file: Path) -> Iterable[str]:
+        """Sample evenly across a large sorted file without loading it."""
+        try:
+            file_size = dataset_file.stat().st_size
+        except OSError:
+            return
+        if file_size <= 0:
+            return
+
+        windows = max(1, int(os.getenv("DATASET_SAMPLE_WINDOWS", "1000")))
+        rows_per_window = max(1, int(os.getenv("DATASET_SAMPLE_ROWS_PER_WINDOW", "100")))
+        with dataset_file.open("rb") as handle:
+            for window in range(min(windows, file_size)):
+                handle.seek((file_size * window) // windows)
+                handle.readline()  # Discard a possible partial line.
+                for _ in range(rows_per_window):
+                    raw_line = handle.readline()
+                    if not raw_line:
+                        break
+                    yield raw_line.decode("utf-8", errors="replace")
 
     def _candidate_files(self) -> Iterable[Path]:
         path = self.output_path
