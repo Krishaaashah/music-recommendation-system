@@ -10,6 +10,8 @@ output/
     part-r-00000
   local-cf-train-split/
     part-r-00000
+  local-cf-top100/
+    part-r-00000
 ```
 
 The FastAPI backend reads Mahout recommendations from `output/mahout` by default. To use another file or directory, set:
@@ -23,3 +25,6 @@ The Mahout recommendation output is generated data and should normally not be co
 The checked-in `local-cf-train-split` artifact is the reproducible local benchmark
 used by the Docker evaluation endpoint when Mahout is unavailable. Regenerate it
 with `python scripts/build_local_cf_benchmark.py`.
+
+The optional `local-cf-top100` artifact is generated with `--k 100` for wider
+Recall@100 and Hit Rate@100 analysis.

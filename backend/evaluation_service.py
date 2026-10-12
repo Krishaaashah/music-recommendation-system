@@ -52,7 +52,8 @@ class EvaluationService:
         self.dataset_path = Path(os.getenv("DATASET_INTERACTIONS_PATH", dataset_path))
         self.song_mapping_path = Path(os.getenv("SONG_MAPPING_PATH", song_mapping_path))
         self.user_mapping_path = Path(os.getenv("USER_MAPPING_PATH", user_mapping_path))
-        self.k = k
+        configured_k = os.getenv("EVALUATION_K")
+        self.k = max(1, int(configured_k)) if configured_k else k
         # Keep the legacy test dataset exact by default; the active Last.fm
         # compose profile sets a bounded scan explicitly for fast demos.
         self.max_rows = max(0, int(os.getenv("EVALUATION_MAX_ROWS", "0")))

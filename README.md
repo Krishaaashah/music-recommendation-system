@@ -265,6 +265,8 @@ python scripts/build_local_cf_benchmark.py
 
 The benchmark uses the top 100 interactions per user, removes one deterministic held-out item, and trains candidate generation from the remaining interactions. This avoids the previous first-million-row bias and makes Precision@10, Recall@10, MRR@10, and Hit Rate@10 directly reproducible.
 
+For a wider retrieval analysis, the checked-in `output/local-cf-top100` artifact reports Recall@100 and Hit Rate@100 of 80.34% on the same users. This is a different operating point: it measures whether the relevant track appears in a 100-item candidate set, not whether it appears in the first 10 results.
+
 ## Evidence And Documentation
 
 - [Architecture notes](docs/architecture.md)
