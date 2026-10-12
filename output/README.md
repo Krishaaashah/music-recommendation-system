@@ -8,6 +8,8 @@ Recommended local layout:
 output/
   mahout/
     part-r-00000
+  local-cf-train-split/
+    part-r-00000
 ```
 
 The FastAPI backend reads Mahout recommendations from `output/mahout` by default. To use another file or directory, set:
@@ -16,4 +18,8 @@ The FastAPI backend reads Mahout recommendations from `output/mahout` by default
 MAHOUT_RECOMMENDATIONS_PATH=/path/to/mahout/output
 ```
 
-The recommendation output itself is generated data and should not be committed.
+The Mahout recommendation output is generated data and should normally not be committed.
+
+The checked-in `local-cf-train-split` artifact is the reproducible local benchmark
+used by the Docker evaluation endpoint when Mahout is unavailable. Regenerate it
+with `python scripts/build_local_cf_benchmark.py`.

@@ -247,7 +247,7 @@ The Spark streaming job reads "streaming/input", validates the schema, checkpoin
 
 ## Evaluation
 
-"GET /evaluation/metrics" evaluates the recommender with a deterministic 20 percent row holdout. The reported metrics include:
+"GET /evaluation/metrics" evaluates the configured benchmark recommendation file with a deterministic train-only leave-one-item-out split. The active Docker profile uses the local train-only user/item-CF benchmark because it can be reproduced without requiring the Mahout container to be running; the production API still reads the Apache Mahout output from `MAHOUT_RECOMMENDATIONS_PATH`. The reported metrics include:
 
 - Precision@K
 - Recall@K
@@ -257,7 +257,13 @@ The Spark streaming job reads "streaming/input", validates the schema, checkpoin
 - Hit rate
 - Catalogue coverage
 
-The metrics are calculated from the available data and recommendation output; they are not manually hard-coded. A configurable local scan limit keeps evaluation responsive on a development machine.
+The metrics are calculated from the available data and recommendation output; they are not manually hard-coded. To regenerate the benchmark artifact after changing the data or model logic:
+
+~~~powershell
+python scripts/build_local_cf_benchmark.py
+~~~
+
+The benchmark uses the top 100 interactions per user, removes one deterministic held-out item, and trains candidate generation from the remaining interactions. This avoids the previous first-million-row bias and makes Precision@10, Recall@10, MRR@10, and Hit Rate@10 directly reproducible.
 
 ## Evidence And Documentation
 

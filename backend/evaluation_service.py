@@ -1,7 +1,9 @@
-"""Compute offline ranking metrics from the checked-in Mahout output and data."""
+"""Compute offline ranking metrics from a configured recommendation artifact and data."""
 from __future__ import annotations
 
 import csv
+import hashlib
+import heapq
 import logging
 import math
 import os
@@ -42,7 +44,10 @@ class EvaluationService:
         k: int = 10,
     ) -> None:
         self.recommendations_path = Path(
-            os.getenv("MAHOUT_RECOMMENDATIONS_PATH", recommendations_path)
+            os.getenv(
+                "EVALUATION_RECOMMENDATIONS_PATH",
+                os.getenv("MAHOUT_RECOMMENDATIONS_PATH", recommendations_path),
+            )
         )
         self.dataset_path = Path(os.getenv("DATASET_INTERACTIONS_PATH", dataset_path))
         self.song_mapping_path = Path(os.getenv("SONG_MAPPING_PATH", song_mapping_path))
@@ -51,6 +56,7 @@ class EvaluationService:
         # Keep the legacy test dataset exact by default; the active Last.fm
         # compose profile sets a bounded scan explicitly for fast demos.
         self.max_rows = max(0, int(os.getenv("EVALUATION_MAX_ROWS", "0")))
+        self.evaluation_mode = os.getenv("EVALUATION_MODE", "row_holdout").strip().lower()
         self._metrics: EvaluationMetrics | None = None
         self._user_ids: dict[str, str] | None = None
 
@@ -64,6 +70,9 @@ class EvaluationService:
             recommendations = self._load_recommendations()
         except RecommendationDataUnavailable as exc:
             return self._empty_metrics(str(exc))
+
+        if self.evaluation_mode == "leave_one_out":
+            return self._compute_leave_one_out(recommendations)
 
         recommended_item_ids = {
             item_id
@@ -102,8 +111,56 @@ class EvaluationService:
         sample_note = f"first {self.max_rows:,} rows" if self.max_rows else "all source rows"
         metrics.dataset_split = f"80% train / 20% test by row modulo 5; {total_rows:,} source rows scanned ({sample_note})"
         metrics.description = (
-            "Measured against the checked-in Mahout recommendation output. "
+            "Measured against the configured recommendation artifact. "
             "A zero value means no valid user/item overlap was available for that metric."
+        )
+        return metrics
+
+    def _compute_leave_one_out(self, recommendations: dict[str, list[str]]) -> EvaluationMetrics:
+        """Score a recommendation file against a deterministic train-only split."""
+        if not self.dataset_path.is_file() or not self.song_mapping_path.is_file():
+            return self._empty_metrics("The dataset or song mapping is unavailable.")
+
+        code_to_item = self._load_song_mapping(None)
+        per_user: dict[str, list[tuple[int, str]]] = defaultdict(list)
+        with self.dataset_path.open("r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) < 3:
+                    continue
+                item_id = code_to_item.get(parts[1].strip())
+                if not item_id:
+                    continue
+                try:
+                    plays = max(1, int(parts[2].strip()))
+                except ValueError:
+                    plays = 1
+                user_id = self._user_id_for_hash(parts[0].strip())
+                heap = per_user[user_id]
+                entry = (plays, item_id)
+                if len(heap) < 100:
+                    heapq.heappush(heap, entry)
+                elif entry > heap[0]:
+                    heapq.heapreplace(heap, entry)
+
+        holdout: dict[str, set[str]] = {}
+        for user_id, heap in per_user.items():
+            items = [(item_id, plays) for plays, item_id in sorted(heap, reverse=True)]
+            if len(items) <= 1 or user_id not in recommendations:
+                continue
+            digest = hashlib.sha1(user_id.encode("utf-8")).digest()
+            index = int.from_bytes(digest[:4], "big") % min(len(items), 100)
+            holdout[user_id] = {items[index][0]}
+
+        metrics = self._score(recommendations, holdout, self._count_mapping_rows())
+        metrics.evaluation_strategy = "Deterministic leave-one-item-out per user"
+        metrics.dataset_split = (
+            "Train-only benchmark: the hashed held-out item is removed from each user's top 100 interactions; "
+            f"{len(per_user):,} user histories scanned"
+        )
+        metrics.description = (
+            "Measured against recommendations generated without each user's held-out item. "
+            "This mode is intended for the local train-only benchmark and avoids the old first-row scan bias."
         )
         return metrics
 

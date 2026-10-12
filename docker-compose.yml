@@ -30,11 +30,13 @@ services:
       - MONGO_URI=mongodb://mongodb:27017
       - MONGO_DB_NAME=music_recommendation
       - MAHOUT_RECOMMENDATIONS_PATH=/app/output/mahout-lastfm
+      - EVALUATION_RECOMMENDATIONS_PATH=/app/output/local-cf-train-split
+      - EVALUATION_MODE=leave_one_out
       - DATASET_INTERACTIONS_PATH=/app/dataset/lastfm/train_triplets.txt
       - SONG_MAPPING_PATH=/app/dataset/lastfm/song_mapping.csv
       - USER_MAPPING_PATH=/app/dataset/lastfm/user_mapping.csv
       - SONG_METADATA_PATH=/app/dataset/lastfm/song_metadata.csv
-      - EVALUATION_MAX_ROWS=1000000
+      - EVALUATION_MAX_ROWS=0
       - STREAM_INPUT_DIR=/app/streaming/input
       - CORS_ORIGINS=http://localhost:8501,http://127.0.0.1:8501,http://localhost:3000,http://127.0.0.1:3000
     volumes:
