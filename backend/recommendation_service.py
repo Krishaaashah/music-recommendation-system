@@ -654,6 +654,12 @@ class RecommendationService:
 
         windows = max(1, int(os.getenv("DATASET_SAMPLE_WINDOWS", "1000")))
         rows_per_window = max(1, int(os.getenv("DATASET_SAMPLE_ROWS_PER_WINDOW", "100")))
+        # Small fixture files should be read normally. Seeking across a tiny
+        # file and discarding partial lines can otherwise skip every record.
+        if file_size <= 1_000_000:
+            with dataset_file.open("r", encoding="utf-8", errors="replace") as handle:
+                yield from handle
+            return
         with dataset_file.open("rb") as handle:
             for window in range(min(windows, file_size)):
                 handle.seek((file_size * window) // windows)

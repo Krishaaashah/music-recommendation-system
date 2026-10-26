@@ -13,7 +13,7 @@ This project turns large-scale listening history into personalised song recommen
 | Personalised recommendations | Mahout item-based collaborative filtering |
 | Hybrid ranking | Collaborative score + metadata similarity + popularity |
 | Large-scale processing | Apache Spark batch and Structured Streaming |
-| Distributed storage | Hadoop HDFS with three DataNode locations |
+| Distributed storage | Hadoop HDFS with five DataNode locations and replication factor 3 |
 | Event persistence | MongoDB and JSON streaming input |
 | Application API | FastAPI with automatic OpenAPI documentation |
 | User interface | Streamlit dashboard and static music-focused frontend |
@@ -149,12 +149,26 @@ The repository also contains a one-million-row MSD benchmark arrangement. Keep i
 | Streamlit | Python dashboard |
 | MongoDB | Event and cached-document storage |
 | "h-primary" | HDFS NameNode |
-| "h-worker1" to "h-worker3" | HDFS DataNodes |
+| "h-worker1" to "h-worker5" | HDFS DataNodes |
 | YARN services | Resource management and worker execution |
 | Spark master | Spark cluster coordinator |
 | Spark workers | Distributed Spark executors |
 
-The three DataNode containers demonstrate an HDFS replication factor of three. Docker containers are used for a local academic cluster simulation; a production deployment could place equivalent services on virtual machines, Kubernetes nodes or managed cloud services.
+The five DataNode containers demonstrate an HDFS replication factor of three. Each block is intended to have three copies, while the additional DataNodes provide more placement capacity. Docker containers are used for a local academic cluster simulation; a production deployment could place equivalent services on separate virtual machines, Kubernetes nodes or managed cloud services.
+
+### How Spark works in this project
+
+Spark is the distributed processing layer. The Compose topology contains one Spark master and five Spark workers. The master accepts a submitted application and schedules its jobs; workers run executor tasks against partitions of the input data. Spark reads interaction data from HDFS, performs transformations such as filtering, deduplication, grouping and aggregation, and writes compressed Parquet outputs back to HDFS.
+
+The batch pipeline follows a medallion pattern:
+
+1. **Bronze:** ingest raw user-song-play records.
+2. **Silver:** validate fields, remove invalid rows and duplicate user-song pairs, then write typed Parquet.
+3. **Gold:** aggregate user profiles and item popularity features for downstream recommendation work.
+
+The streaming pipeline uses Spark Structured Streaming. It watches JSON event files, applies the event schema and validation rules, uses checkpoints for recovery, and writes Bronze, Silver and Gold event data. MongoDB stores serving-friendly event documents; Spark produces the distributed analytics outputs. Mahout remains the offline collaborative-filtering engine, while FastAPI serves the final recommendations.
+
+For the local academic setup, the Spark services are a standalone Spark cluster. YARN is included as the Hadoop resource-management layer, but Spark should only be described as YARN-managed when the job is explicitly submitted with a YARN master. The project demonstrates both Hadoop/YARN infrastructure and a Spark standalone execution path without claiming that every Spark job is already running through YARN.
 
 ### Ports
 

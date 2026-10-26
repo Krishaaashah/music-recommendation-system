@@ -167,7 +167,7 @@ def health() -> HealthResponse:
         status="healthy" if rec_available else "degraded",
         mahout_data_available=rec_available,
         mongodb_available=mongo_ok,
-        hadoop_hdfs="Configured (Docker roles: h-primary, h-worker1, h-worker2, h-worker3; runtime not probed)",
+        hadoop_hdfs="Configured (Docker roles: h-primary, h-worker1..h-worker5; runtime not probed)",
         spark_engine="Configured (Apache Spark 3.5.9; runtime not probed)",
         mahout_cf=f"Loaded ({recommendation_service.recommendation_user_count:,} users; Item-Based CF / SIMILARITY_LOGLIKELIHOOD)",
         mongodb_status="Connected (Port 27017)" if mongo_ok else "Standalone Cache Mode (MongoDB offline)",

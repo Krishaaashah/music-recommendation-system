@@ -5,7 +5,8 @@ services:
     container_name: mongodb
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      # Keep the database reachable from this machine for the demo, but not from the LAN.
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
@@ -25,7 +26,7 @@ services:
     restart: unless-stopped
     command: python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - MONGO_URI=mongodb://mongodb:27017
       - MONGO_DB_NAME=music_recommendation
@@ -63,7 +64,7 @@ services:
     restart: unless-stopped
     command: streamlit run streamlit_app.py --server.port 8501 --server.address 0.0.0.0
     ports:
-      - "8501:8501"
+      - "127.0.0.1:8501:8501"
     environment:
       - API_BASE_URL=http://fastapi:8000
     depends_on:
@@ -82,8 +83,8 @@ services:
       - CORE_CONF_fs_defaultFS=hdfs://h-primary:9000
       - HDFS_CONF_dfs_replication=3
     ports:
-      - "9870:9870"
-      - "9000:9000"
+      - "127.0.0.1:9870:9870"
+      - "127.0.0.1:9000:9000"
     volumes:
       - namenode_data:/hadoop/dfs/name
       - ./dataset:/opt/music/dataset:ro
@@ -100,7 +101,7 @@ services:
     depends_on:
       - h-primary
     ports:
-      - "8088:8088"
+      - "127.0.0.1:8088:8088"
     networks:
       - music-net
 
@@ -179,71 +180,124 @@ services:
     networks:
       - music-net
 
-  # Spark 3.5.9 services provide a reproducible local distributed demo.
+  # Five logical DataNodes give the demo enough placement capacity for
+  # replication factor 3 while keeping two additional worker slots available.
+  h-worker4:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: h-worker4
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://h-primary:9000
+      - HDFS_CONF_dfs_replication=3
+    depends_on:
+      - h-primary
+    volumes:
+      - datanode4_data:/hadoop/dfs/data
+    networks:
+      - music-net
+
+  h-worker4-yarn:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: h-worker4-yarn
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://h-primary:9000
+      - YARN_CONF_yarn_resourcemanager_hostname=h-primary-yarn
+      - YARN_CONF_yarn_nodemanager_aux___services=mapreduce_shuffle
+    depends_on:
+      - h-primary-yarn
+    networks:
+      - music-net
+
+  h-worker5:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: h-worker5
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://h-primary:9000
+      - HDFS_CONF_dfs_replication=3
+    depends_on:
+      - h-primary
+    volumes:
+      - datanode5_data:/hadoop/dfs/data
+    networks:
+      - music-net
+
+  h-worker5-yarn:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: h-worker5-yarn
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://h-primary:9000
+      - YARN_CONF_yarn_resourcemanager_hostname=h-primary-yarn
+      - YARN_CONF_yarn_nodemanager_aux___services=mapreduce_shuffle
+    depends_on:
+      - h-primary-yarn
+    networks:
+      - music-net
+
+  # Official Apache Spark 3.5.9 services provide a reproducible local distributed demo.
   # Hadoop remains the storage layer; YARN is available through h-primary-yarn.
   spark-master:
-    image: bitnami/spark:3.5.9
+    image: apache/spark:3.5.9-scala2.12-java17-python3
     container_name: h-primary-spark
+    command: ["/opt/spark/sbin/start-master.sh"]
     environment:
-      - SPARK_MODE=master
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+      - SPARK_NO_DAEMONIZE=true
     ports:
-      - "7077:7077"
-      - "8081:8080"
+      - "127.0.0.1:7077:7077"
+      - "127.0.0.1:8081:8080"
     depends_on:
       - h-primary
     networks:
       - music-net
 
   spark-worker1:
-    image: bitnami/spark:3.5.9
+    image: apache/spark:3.5.9-scala2.12-java17-python3
     container_name: h-worker1-spark
+    command: ["/opt/spark/sbin/start-worker.sh", "spark://spark-master:7077"]
     environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=1G
-      - SPARK_WORKER_CORES=1
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+      - SPARK_NO_DAEMONIZE=true
     depends_on:
       - spark-master
     networks:
       - music-net
 
   spark-worker2:
-    image: bitnami/spark:3.5.9
+    image: apache/spark:3.5.9-scala2.12-java17-python3
     container_name: h-worker2-spark
+    command: ["/opt/spark/sbin/start-worker.sh", "spark://spark-master:7077"]
     environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=1G
-      - SPARK_WORKER_CORES=1
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+      - SPARK_NO_DAEMONIZE=true
     depends_on:
       - spark-master
     networks:
       - music-net
 
   spark-worker3:
-    image: bitnami/spark:3.5.9
+    image: apache/spark:3.5.9-scala2.12-java17-python3
     container_name: h-worker3-spark
+    command: ["/opt/spark/sbin/start-worker.sh", "spark://spark-master:7077"]
     environment:
-      - SPARK_MODE=worker
-      - SPARK_MASTER_URL=spark://spark-master:7077
-      - SPARK_WORKER_MEMORY=1G
-      - SPARK_WORKER_CORES=1
-      - SPARK_RPC_AUTHENTICATION_ENABLED=no
-      - SPARK_RPC_ENCRYPTION_ENABLED=no
-      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
-      - SPARK_SSL_ENABLED=no
+      - SPARK_NO_DAEMONIZE=true
+    depends_on:
+      - spark-master
+    networks:
+      - music-net
+
+  spark-worker4:
+    image: apache/spark:3.5.9-scala2.12-java17-python3
+    container_name: h-worker4-spark
+    command: ["/opt/spark/sbin/start-worker.sh", "spark://spark-master:7077"]
+    environment:
+      - SPARK_NO_DAEMONIZE=true
+    depends_on:
+      - spark-master
+    networks:
+      - music-net
+
+  spark-worker5:
+    image: apache/spark:3.5.9-scala2.12-java17-python3
+    container_name: h-worker5-spark
+    command: ["/opt/spark/sbin/start-worker.sh", "spark://spark-master:7077"]
+    environment:
+      - SPARK_NO_DAEMONIZE=true
     depends_on:
       - spark-master
     networks:
@@ -259,6 +313,10 @@ volumes:
   datanode2_data:
     driver: local
   datanode3_data:
+    driver: local
+  datanode4_data:
+    driver: local
+  datanode5_data:
     driver: local
 
 networks:

@@ -18,6 +18,10 @@ This checklist records the current implementation status of the scalable music r
 - [x] Static frontend has loading, error, empty, API status, recommendation, history, similar-song, activity, architecture, and evaluation states.
 - [x] Streamlit dashboard uses the same visual language and current Last.fm terminology.
 - [x] Docker Compose definitions include the API, MongoDB, Hadoop/Spark services, and replication-factor configuration.
+- [x] Docker Compose declares five logical HDFS DataNodes, five YARN NodeManagers and five Spark workers.
+- [x] HDFS replication remains explicitly configured at factor 3.
+- [x] Local host-published services are restricted to `127.0.0.1`.
+- [x] Recommendation and similarity actions show an animated loading state while requests are running.
 
 ## Verify Before Final Demonstration
 
@@ -28,6 +32,10 @@ This checklist records the current implementation status of the scalable music r
 - [ ] Start MongoDB and confirm the dashboard changes from cache fallback to MongoDB connected.
 - [ ] Start the live simulator and capture the event feed and updated statistics.
 - [ ] Capture final evidence screenshots for the report: API health, recommendation response, similar songs, live events, architecture, and evaluation metrics.
+- [ ] Add authentication/TLS and secret management before any non-local deployment.
+- [ ] Replace the legacy Hadoop image and pin image/dependency digests for reproducibility.
+- [ ] Add live HDFS/YARN/Spark worker probes to the health endpoint.
+- [ ] Move the logical nodes to separate VMs or cloud instances if true host-level fault tolerance is required.
 
 ## Current Local Evidence
 

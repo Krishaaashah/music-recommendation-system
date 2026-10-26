@@ -74,7 +74,8 @@ async function loadRecommendations(event) {
   if (!userId) { setMessage("Enter a user ID first.", true); return; }
   const button = $("#recommendationForm .primary-button");
   button.disabled = true;
-  button.querySelector("span").textContent = "Finding tracks...";
+  button.classList.add("is-loading");
+  button.querySelector(".button-label").textContent = "Finding tracks...";
   $("#resultCount").textContent = "Loading";
   setMessage("Reading this listener's real profile...");
   try {
@@ -90,7 +91,8 @@ async function loadRecommendations(event) {
     $("#recommendations").innerHTML = '<div class="empty-state">The API could not return recommendations. Check the service status above.</div>';
   } finally {
     button.disabled = false;
-    button.querySelector("span").textContent = "Generate recommendations";
+    button.classList.remove("is-loading");
+    button.querySelector(".button-label").textContent = "Generate recommendations";
   }
 }
 
@@ -99,7 +101,11 @@ async function loadSimilar(event) {
   const songId = $("#songId").value.trim();
   const limit = $("#similarLimit").value;
   const target = $("#similarResults");
+  const button = $("#similarForm .primary-button");
   if (!songId) return;
+  button.disabled = true;
+  button.classList.add("is-loading");
+  button.querySelector(".button-label").textContent = "Finding matches...";
   target.innerHTML = '<div class="empty-state">Mapping metadata and interaction neighbours...</div>';
   try {
     const data = await apiFetch(`/similar/${encodeURIComponent(songId)}?n=${limit}`);
@@ -107,6 +113,10 @@ async function loadSimilar(event) {
     target.innerHTML = data.similar_songs?.length ? data.similar_songs.map((item, index) => `<article class="recommendation-card"><div class="track-cover ${["", "cover-two", "cover-three", "cover-four"][index % 4]}" aria-hidden="true">♫</div><div><div class="track-title">${escapeHtml(item.track_name || `Item ${item.item_id}`)}</div><div class="artist-name">${escapeHtml(item.artist_name || "Metadata not available")}</div><div class="track-meta"><span>#${item.rank}</span><span>ITEM ${escapeHtml(item.item_id)}</span><span class="track-score">SIM ${Number(item.similarity_score || 0).toFixed(4)}</span></div><div class="reason">${escapeHtml(item.similarity_type || "Similarity")}</div></div></article>`).join("") : '<div class="empty-state">No similar tracks found for this item.</div>';
   } catch (error) {
     target.innerHTML = `<div class="empty-state">${escapeHtml(error.message)}</div>`;
+  } finally {
+    button.disabled = false;
+    button.classList.remove("is-loading");
+    button.querySelector(".button-label").textContent = "Find similar tracks";
   }
 }
 

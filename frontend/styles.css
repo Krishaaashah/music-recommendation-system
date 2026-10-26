@@ -97,6 +97,9 @@ input:focus, select:focus { border-color: var(--green); box-shadow: 0 0 0 3px #1
 .quick-picks button:hover { border-color: var(--green); color: var(--green); }
 .form-row { display: grid; grid-template-columns: 1fr 86px; gap: 10px; }
 .primary-button { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 43px; margin-top: 20px; border: 0; border-radius: 5px; padding: 0 13px; background: var(--green); color: #06140a; font-size: 12px; font-weight: 800; }
+.button-spinner { display: none; width: 14px; height: 14px; margin-left: auto; margin-right: 10px; border: 2px solid #06140a55; border-top-color: #06140a; border-radius: 50%; animation: button-spin .75s linear infinite; }
+.primary-button.is-loading .button-spinner { display: inline-block; }
+@keyframes button-spin { to { transform: rotate(360deg); } }
 .primary-button:hover { background: #62e98c; }
 .primary-button:disabled { opacity: .6; cursor: wait; }
 .method-note { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 16px; }

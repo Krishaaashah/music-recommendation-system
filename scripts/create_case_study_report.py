@@ -23,12 +23,15 @@ OUTPUT = ROOT / "Music_Recommendation_Big_Data_Case_Study_Report.docx"
 RED = "A61B1B"
 LIGHT_RED = "F7E6E6"
 PALE_RED = "FCF4F4"
+PALE_BLUE = "EEF8FA"
 BLACK = "000000"
 WHITE = "FFFFFF"
 GRAY = "666666"
 LIGHT_GRAY = "D9D9D9"
 PIL_RED = f"#{RED}"
 PIL_PALE_RED = f"#{PALE_RED}"
+PIL_BLUE = "#287C86"
+PIL_PALE_BLUE = f"#{PALE_BLUE}"
 PIL_BLACK = f"#{BLACK}"
 PIL_WHITE = f"#{WHITE}"
 PIL_GRAY = "#666666"
@@ -99,12 +102,12 @@ def make_architecture_diagram() -> Path:
     title_font = pil_font(38, True)
     small = pil_font(22)
     draw.text((50, 28), "Figure 2  Distributed System Architecture", fill=PIL_RED, font=title_font)
-    draw.text((50, 78), "Docker Compose demonstration with HDFS replication factor 3", fill=PIL_GRAY, font=small)
+    draw.text((50, 78), "Docker Compose demonstration with five DataNodes and HDFS replication factor 3", fill=PIL_GRAY, font=small)
 
     draw_box(draw, (50, 190, 420, 390), "Last.fm 1K", "Raw TSV events and user profiles")
     draw_box(draw, (50, 550, 420, 760), "Preparation", "Streaming parser, SQLite aggregation, integer ID mapping, metadata catalog")
 
-    draw_box(draw, (540, 160, 1180, 420), "HDFS Cluster", "h-primary NameNode plus h-worker1, h-worker2 and h-worker3 DataNodes\nReplication factor: 3")
+    draw_box(draw, (540, 160, 1180, 420), "HDFS Cluster", "h-primary NameNode plus h-worker1 to h-worker5 DataNodes\nReplication factor: 3")
     draw_box(draw, (540, 540, 1180, 760), "Distributed Processing", "Apache Mahout item-based CF\nApache Spark batch and streaming jobs")
 
     draw_box(draw, (1310, 160, 1740, 390), "Serving Layer", "FastAPI recommendation API\nMongoDB event and analytics store")
@@ -126,29 +129,34 @@ def make_architecture_diagram() -> Path:
 
 
 def make_methodology_diagram() -> Path:
-    image = Image.new("RGB", (1600, 470), PIL_WHITE)
+    image = Image.new("RGB", (1800, 650), PIL_WHITE)
     draw = ImageDraw.Draw(image)
     title_font = pil_font(34, True)
-    box_font = pil_font(24, True)
-    body_font = pil_font(21)
+    box_font = pil_font(21, True)
+    body_font = pil_font(17)
     draw.text((44, 24), "Figure 1  Methodology Workflow", fill=PIL_RED, font=title_font)
     labels = [
-        ("1  Ingest", "Read Last.fm TSV"),
-        ("2  Prepare", "Aggregate and map IDs"),
-        ("3  Store", "HDFS with RF 3"),
-        ("4  Learn", "Mahout item CF"),
-        ("5  Serve", "API and dashboard"),
+        ("1  Ingest", "Read raw TSV line by line"),
+        ("2  Aggregate", "Count user-track plays"),
+        ("3  Map", "Stable integer IDs"),
+        ("4  Process", "Spark batch and medallion"),
+        ("5  Store", "HDFS with replication 3"),
+        ("6  Recommend", "Mahout item-based CF"),
+        ("7  Serve", "FastAPI and dashboard"),
     ]
     x = 35
     for index, (title, body) in enumerate(labels):
-        x1, x2 = x, x + 260
-        draw.rounded_rectangle((x1, 155, x2, 335), radius=16, fill=PIL_PALE_RED, outline=PIL_RED, width=4)
-        draw.text((x1 + 18, 180), title, fill=PIL_RED, font=box_font)
-        for i, line in enumerate(wrap_lines(draw, body, body_font, 220)):
-            draw.text((x1 + 18, 235 + i * 30), line, fill=PIL_BLACK, font=body_font)
+        x1, x2 = x, x + 220
+        draw.rounded_rectangle((x1, 155, x2, 385), radius=16, fill=PIL_PALE_RED, outline=PIL_RED, width=4)
+        draw.text((x1 + 14, 180), title, fill=PIL_RED, font=box_font)
+        for i, line in enumerate(wrap_lines(draw, body, body_font, 190)):
+            draw.text((x1 + 14, 240 + i * 27), line, fill=PIL_BLACK, font=body_font)
         if index < len(labels) - 1:
-            arrow(draw, (x2 + 8, 245), (x2 + 48, 245), width=4)
-        x += 305
+            arrow(draw, (x2 + 5, 270), (x2 + 15, 270), width=3)
+        x += 245
+    draw.rounded_rectangle((48, 465, 1750, 590), radius=14, fill=PIL_PALE_BLUE, outline=PIL_BLUE, width=4)
+    draw.text((75, 490), "In parallel: Spark Structured Streaming", fill=PIL_RED, font=box_font)
+    draw.text((75, 535), "JSON events are schema-validated, live statistics are computed, and Bronze / Silver / Gold Parquet outputs are written.", fill=PIL_BLACK, font=body_font)
     path = ASSETS / "methodology_workflow.png"
     image.save(path)
     return path
@@ -472,7 +480,7 @@ def create_report() -> Path:
     for item in [
         "Prepare the Last.fm 1K event log without loading the complete raw file into memory.",
         "Aggregate repeated listens into user-track interaction counts and create stable integer IDs for Mahout.",
-        "Design an HDFS cluster with three DataNodes and replication factor 3 for the target distributed deployment.",
+        "Design an HDFS cluster with five DataNodes and replication factor 3 for the target distributed deployment.",
         "Generate top-10 personalized recommendations using Apache Mahout item-based collaborative filtering with log-likelihood similarity.",
         "Use real artist and track-name metadata for content similarity and hybrid ranking without inventing genre or mood labels.",
         "Join recommendation IDs with artist and track metadata so that the application displays meaningful music names.",
@@ -504,18 +512,18 @@ def create_report() -> Path:
         ["1. Ingest", "Read the raw tab-separated event log line by line.", "Validated raw event stream"],
         ["2. Aggregate", "Count repeated listens for every user and track pair.", "4,620,928 compact interactions"],
         ["3. Map", "Assign stable integer IDs to users and tracks.", "User and song mapping files"],
-        ["4. Enrich", "Preserve artist, track, MBID, play and listener metadata.", "Song catalog"],
-        ["5. Store", "Place Mahout input and outputs in HDFS paths.", "Distributed data layout"],
+        ["4. Process", "Run Spark batch cleaning, medallion aggregation and Parquet generation.", "Bronze / Silver / Gold data"],
+        ["5. Store", "Place Mahout input and analytics outputs in HDFS with replication 3.", "Distributed data layout"],
         ["6. Recommend", "Run Mahout item-based collaborative filtering.", "Top-10 recommendations"],
-        ["7. Serve", "Load results through FastAPI and display them in Streamlit.", "Interactive application"],
+        ["7. Serve", "Load results through FastAPI and display them in the dashboard.", "Interactive application"],
     ], widths=[1.15, 3.6, 2.2])
-    add_text(doc, "The project also includes a Spark Structured Streaming path for JSON events. The streaming process validates event schemas, computes live statistics, and writes Bronze, Silver, and Gold Parquet outputs. This provides a real-time analytics extension to the offline recommendation workflow.")
+    add_text(doc, "Spark is an explicit methodology stage, not only a supporting tool. The batch path cleans and aggregates HDFS data into Bronze, Silver, and Gold Parquet outputs. In parallel, Spark Structured Streaming validates JSON events, computes live statistics, uses checkpoints, and writes event analytics. Mahout consumes prepared historical interactions for offline collaborative filtering after the processing and storage stages.")
 
     add_heading(doc, "6", "System Architecture and Workflow")
     add_image(doc, architecture, 6.65)
-    add_caption(doc, "Figure 2  Target distributed architecture with three HDFS replica locations")
-    add_text(doc, "The target Docker Compose topology contains a NameNode, a YARN ResourceManager, three HDFS DataNodes, three YARN NodeManagers, a Spark master, three Spark workers, MongoDB, FastAPI, and Streamlit. The DataNodes are h-worker1, h-worker2, and h-worker3. The HDFS configuration sets the default replication factor to 3 so a block can be stored on all three worker nodes.")
-    add_text(doc, "For a local college demonstration, these nodes are separate Docker containers on one physical computer. This demonstrates distributed roles and replica configuration, but it does not provide hardware-level fault isolation. A production cloud version could place the master role on one virtual machine and the three DataNodes on three separate worker virtual machines. Creating three additional complete application stacks is unnecessary; only the worker services are added for the HDFS and Spark cluster.")
+    add_caption(doc, "Figure 2  Target distributed architecture with five DataNodes and replication factor 3")
+    add_text(doc, "The target Docker Compose topology contains a NameNode, a YARN ResourceManager, five HDFS DataNodes, five YARN NodeManagers, a Spark master, five Spark workers, MongoDB, FastAPI, and Streamlit. The DataNodes are h-worker1 through h-worker5. The HDFS configuration sets the default replication factor to 3 so each block is intended to have three copies while the extra worker nodes provide placement capacity.")
+    add_text(doc, "For a local college demonstration, these nodes are separate Docker containers on one physical computer. This demonstrates distributed roles and replica configuration, but it does not provide hardware-level fault isolation. A production cloud version could place the master role and workers on separate virtual machines. Creating five additional complete application stacks is unnecessary; only the HDFS, YARN and Spark worker services are scaled.")
     add_text(doc, "The normal workflow is: Last.fm data is prepared locally, the Mahout input is uploaded to HDFS, Mahout generates recommendations, recommendation output is copied to the application output directory, FastAPI loads the output and metadata, and Streamlit calls the API to display recommendations and operational statistics.")
 
     add_heading(doc, "7", "Big Data Tools and Technologies Used")
